@@ -10,15 +10,18 @@ namespace DivisorGame.EditorTools
     /// WebGL 빌드 (T13).
     /// 메뉴에서 실행하거나, CLI에서 -executeMethod로 호출한다.
     ///
-    /// 용도가 두 가지라 진입점을 나눠 두었다.
+    /// 용도가 세 가지라 진입점을 나눠 두었다.
     ///  - 로컬 확인용: 압축 없음. 아무 정적 서버에서나 바로 열린다.
-    ///  - 배포용: Brotli 압축. 전송량이 1/4로 줄지만, 웹서버가 Content-Encoding 헤더를
-    ///    정확히 내려줘야 한다. divisorGame/vercel.json이 그 헤더를 지정한다.
+    ///  - Vercel 배포용: Brotli 압축 + 압축 해제 폴백 없음. 서버가 Content-Encoding
+    ///    헤더를 내려주는 것을 전제로 한다. divisorGame/vercel.json이 그 헤더를 지정한다.
+    ///  - Unity Play 업로드용: Brotli 압축 + 압축 해제 폴백 있음. 업로드형 호스팅은
+    ///    응답 헤더를 우리가 지정할 수 없으므로, 헤더가 없어도 로더가 스스로 풀 수 있어야 한다.
     /// </summary>
     public static class WebGLBuilder
     {
         private const string LocalOutputDirectory = "Builds/WebGL";
         private const string DeployOutputDirectory = "divisorGame";
+        private const string UnityPlayOutputDirectory = "Builds/UnityPlay";
 
         /// <summary>브라우저 창 크기에 맞춰 캔버스를 채우는 커스텀 템플릿.</summary>
         private const string ResponsiveTemplate = "PROJECT:Responsive";
@@ -26,7 +29,7 @@ namespace DivisorGame.EditorTools
         [MenuItem("약수 카드게임/WebGL 빌드 (로컬 확인용)", false, 20)]
         public static void BuildFromMenu()
         {
-            BuildReport report = Build(LocalOutputDirectory, WebGLCompressionFormat.Disabled);
+            BuildReport report = Build(LocalOutputDirectory, WebGLCompressionFormat.Disabled, false);
             if (report == null) return;
 
             if (report.summary.result == BuildResult.Succeeded)
@@ -35,10 +38,10 @@ namespace DivisorGame.EditorTools
             }
         }
 
-        [MenuItem("약수 카드게임/WebGL 빌드 (배포용)", false, 21)]
+        [MenuItem("약수 카드게임/WebGL 빌드 (Vercel 배포용)", false, 21)]
         public static void BuildDeployFromMenu()
         {
-            BuildReport report = Build(DeployOutputDirectory, WebGLCompressionFormat.Brotli);
+            BuildReport report = Build(DeployOutputDirectory, WebGLCompressionFormat.Brotli, false);
             if (report == null) return;
 
             if (report.summary.result == BuildResult.Succeeded)
@@ -47,16 +50,35 @@ namespace DivisorGame.EditorTools
             }
         }
 
+        [MenuItem("약수 카드게임/WebGL 빌드 (Unity Play 업로드용)", false, 22)]
+        public static void BuildUnityPlayFromMenu()
+        {
+            BuildReport report = Build(UnityPlayOutputDirectory, WebGLCompressionFormat.Brotli, true);
+            if (report == null) return;
+
+            if (report.summary.result != BuildResult.Succeeded) return;
+
+            Debug.Log("Unity Play 업로드용 빌드 완료. deploy/unityplay-zip.sh 를 실행해 zip을 만든 뒤 "
+                      + "play.unity.com 에서 업로드하세요.");
+            EditorUtility.RevealInFinder(Path.GetFullPath(UnityPlayOutputDirectory));
+        }
+
         /// <summary>CLI용 진입점(로컬 확인용). 실패하면 0이 아닌 코드로 종료한다.</summary>
         public static void BuildFromCommandLine()
         {
-            Exit(Build(LocalOutputDirectory, WebGLCompressionFormat.Disabled));
+            Exit(Build(LocalOutputDirectory, WebGLCompressionFormat.Disabled, false));
         }
 
-        /// <summary>CLI용 진입점(배포용). 실패하면 0이 아닌 코드로 종료한다.</summary>
+        /// <summary>CLI용 진입점(Vercel 배포용). 실패하면 0이 아닌 코드로 종료한다.</summary>
         public static void BuildDeployFromCommandLine()
         {
-            Exit(Build(DeployOutputDirectory, WebGLCompressionFormat.Brotli));
+            Exit(Build(DeployOutputDirectory, WebGLCompressionFormat.Brotli, false));
+        }
+
+        /// <summary>CLI용 진입점(Unity Play 업로드용). 실패하면 0이 아닌 코드로 종료한다.</summary>
+        public static void BuildUnityPlayFromCommandLine()
+        {
+            Exit(Build(UnityPlayOutputDirectory, WebGLCompressionFormat.Brotli, true));
         }
 
         private static void Exit(BuildReport report)
@@ -65,7 +87,8 @@ namespace DivisorGame.EditorTools
             EditorApplication.Exit(ok ? 0 : 1);
         }
 
-        private static BuildReport Build(string outputDirectory, WebGLCompressionFormat compression)
+        private static BuildReport Build(
+            string outputDirectory, WebGLCompressionFormat compression, bool decompressionFallback)
         {
             string[] scenes = GetEnabledScenes();
             if (scenes.Length == 0)
@@ -79,9 +102,9 @@ namespace DivisorGame.EditorTools
             PlayerSettings.WebGL.compressionFormat = compression;
             PlayerSettings.WebGL.template = ResponsiveTemplate;
 
-            // 압축을 쓰는 배포 빌드에서는 서버가 Content-Encoding을 내려주므로
-            // 로더에 압축 해제 코드를 넣지 않는다(로더 용량 절감).
-            PlayerSettings.WebGL.decompressionFallback = false;
+            // 폴백을 켜면 서버가 Content-Encoding을 내려주지 않아도 로더가 스스로 압축을 푼다.
+            // 응답 헤더를 우리가 지정할 수 있는 곳(Vercel)에서는 꺼서 로더 용량을 아낀다.
+            PlayerSettings.WebGL.decompressionFallback = decompressionFallback;
 
             var options = new BuildPlayerOptions
             {
