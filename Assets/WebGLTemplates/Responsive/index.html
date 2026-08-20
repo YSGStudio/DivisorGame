@@ -7,7 +7,7 @@
     <title>{{{ PRODUCT_NAME }}}</title>
     <style>
       /* 브라우저 창 전체를 채우고, 스크롤을 만들지 않는다.
-         고정 픽셀 크기를 쓰지 않으므로 위아래 컨텐츠가 잘리지 않는다. */
+         컨테이너의 실제 크기는 아래 스크립트가 창 크기에 맞춰 계속 갱신한다. */
       html, body {
         margin: 0;
         padding: 0;
@@ -145,18 +145,61 @@
         showBanner: unityShowBanner,
       };
 
-      // 캔버스의 CSS 크기는 위의 스타일시트가 100%로 잡고, 엔진은
-      // matchWebGLToCanvasSize(기본 true)로 렌더 타겟을 그 크기에 맞춘다.
-      // 여기서는 창 크기가 바뀔 때 레이아웃을 다시 계산하도록만 유도한다.
-      function fitToWindow() {
-        // iOS Safari 등 주소창 높이가 변하는 환경에서 실제 보이는 높이를 반영한다.
-        container.style.height = window.innerHeight + "px";
+      // Unity 6 Web 런타임은 캔버스의 CSS 크기가 바뀌어도 렌더 타겟을 스스로
+      // 따라 바꾸지 않는다. 그대로 두면 처음 로드했을 때의 해상도가 그대로 남아,
+      // 창 크기가 달라지면 화면이 위아래로 눌리거나 잘려 보인다.
+      // 그래서 크기가 바뀔 때마다 엔진에 렌더 타겟 크기를 직접 알려준다.
+      var resizeHandle = null;
+
+      function applyCanvasSize() {
+        resizeHandle = null;
+
+        // 모바일 브라우저는 주소창이 접혔다 펴지므로 visualViewport가 더 정확하다.
+        var view = window.visualViewport;
+        var width = Math.max(1, Math.round(view ? view.width : window.innerWidth));
+        var height = Math.max(1, Math.round(view ? view.height : window.innerHeight));
+
+        container.style.width = width + "px";
+        container.style.height = height + "px";
+
+        // 렌더 타겟은 물리 픽셀 기준이라 devicePixelRatio를 곱한다.
+        // 고배율 화면에서 픽셀 수가 과도하게 늘어나 프레임이 떨어지지 않도록 2배로 제한한다.
+        var ratio = Math.min(window.devicePixelRatio || 1, 2);
+        var bufferWidth = Math.round(width * ratio);
+        var bufferHeight = Math.round(height * ratio);
+        if (canvas.width === bufferWidth && canvas.height === bufferHeight) return;
+
+        var instance = window.unityInstance;
+        if (instance && instance.Module && instance.Module.setCanvasSize) {
+          instance.Module.setCanvasSize(bufferWidth, bufferHeight);
+        } else {
+          // 아직 로딩 중이면 엔진이 이 값을 시작 해상도로 읽어 간다.
+          canvas.width = bufferWidth;
+          canvas.height = bufferHeight;
+        }
       }
+
+      // 드래그로 창 크기를 바꾸면 resize가 연달아 들어오므로 프레임당 한 번만 반영한다.
+      function fitToWindow() {
+        if (resizeHandle !== null) cancelAnimationFrame(resizeHandle);
+        resizeHandle = requestAnimationFrame(applyCanvasSize);
+      }
+
       window.addEventListener("resize", fitToWindow);
       window.addEventListener("orientationchange", function() {
-        setTimeout(fitToWindow, 200);
+        fitToWindow();
+        // 회전 직후에는 아직 이전 크기가 보고되는 기기가 있어 한 번 더 확인한다.
+        setTimeout(fitToWindow, 300);
       });
-      fitToWindow();
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", fitToWindow);
+        window.visualViewport.addEventListener("scroll", fitToWindow);
+      }
+      // 창 크기 변화 없이 레이아웃만 바뀌는 경우(전체화면 전환 등)까지 잡는다.
+      if (window.ResizeObserver) {
+        new ResizeObserver(fitToWindow).observe(container);
+      }
+      applyCanvasSize();
 
       loadingBar.style.display = "block";
 
@@ -168,7 +211,7 @@
         }).then((unityInstance) => {
           loadingBar.style.display = "none";
           window.unityInstance = unityInstance;
-          fitToWindow();
+          applyCanvasSize();
         }).catch((message) => {
           unityShowBanner(message, 'error');
         });
