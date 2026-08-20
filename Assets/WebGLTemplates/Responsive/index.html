@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko-kr">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <style>
+      /* 브라우저 창 전체를 채우고, 스크롤을 만들지 않는다.
+         고정 픽셀 크기를 쓰지 않으므로 위아래 컨텐츠가 잘리지 않는다. */
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #EAF2FF;
+        overscroll-behavior: none;
+      }
+
+      /* 주소창이 접혔다 펴지는 모바일 브라우저에서도 실제 보이는 높이를 쓴다.
+         dvh를 지원하지 않는 브라우저는 위의 100%로 동작한다. */
+      #unity-container {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+      }
+
+      #unity-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: #EAF2FF;
+        /* 캔버스가 포커스를 받을 때 생기는 외곽선 제거 */
+        outline: none;
+        /* 모바일에서 길게 누를 때 뜨는 선택/확대 동작 차단 */
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      #unity-loading-bar {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
+        text-align: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      }
+
+      #unity-loading-title {
+        color: #223055;
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 14px;
+      }
+
+      #unity-progress-bar-empty {
+        width: 220px;
+        height: 14px;
+        border-radius: 7px;
+        background: #C7D6F0;
+        overflow: hidden;
+      }
+
+      #unity-progress-bar-full {
+        width: 0%;
+        height: 100%;
+        border-radius: 7px;
+        background: #3D7BFF;
+        transition: width 0.15s ease-out;
+      }
+
+      #unity-warning {
+        position: absolute;
+        left: 50%;
+        top: 12px;
+        transform: translate(-50%);
+        z-index: 10;
+        display: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="unity-container">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-loading-title">{{{ PRODUCT_NAME }}}</div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"></div>
+    </div>
+
+    <script>
+      var container = document.querySelector("#unity-container");
+      var canvas = document.querySelector("#unity-canvas");
+      var loadingBar = document.querySelector("#unity-loading-bar");
+      var progressBarFull = document.querySelector("#unity-progress-bar-full");
+      var warningBanner = document.querySelector("#unity-warning");
+
+      function unityShowBanner(msg, type) {
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') {
+          div.style = 'background: #F2545B; color: white; padding: 10px; border-radius: 6px;';
+        } else {
+          if (type == 'warning') div.style = 'background: #FFD54F; padding: 10px; border-radius: 6px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#if MEMORY_FILENAME
+        memoryUrl: buildUrl + "/{{{ MEMORY_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: unityShowBanner,
+      };
+
+      // 캔버스의 CSS 크기는 위의 스타일시트가 100%로 잡고, 엔진은
+      // matchWebGLToCanvasSize(기본 true)로 렌더 타겟을 그 크기에 맞춘다.
+      // 여기서는 창 크기가 바뀔 때 레이아웃을 다시 계산하도록만 유도한다.
+      function fitToWindow() {
+        // iOS Safari 등 주소창 높이가 변하는 환경에서 실제 보이는 높이를 반영한다.
+        container.style.height = window.innerHeight + "px";
+      }
+      window.addEventListener("resize", fitToWindow);
+      window.addEventListener("orientationchange", function() {
+        setTimeout(fitToWindow, 200);
+      });
+      fitToWindow();
+
+      loadingBar.style.display = "block";
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        createUnityInstance(canvas, config, (progress) => {
+          progressBarFull.style.width = 100 * progress + "%";
+        }).then((unityInstance) => {
+          loadingBar.style.display = "none";
+          window.unityInstance = unityInstance;
+          fitToWindow();
+        }).catch((message) => {
+          unityShowBanner(message, 'error');
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>

@@ -137,7 +137,7 @@ namespace DivisorGame.UI
 
         private void BuildUI()
         {
-            // R15: 1920x1080 기준, 다양한 창 크기에 맞춰 확대/축소된다.
+            // R15: 1920x1080 기준, 브라우저 창의 너비와 높이에 맞춰 확대/축소된다.
             var canvasGo = new GameObject("GameCanvas", typeof(RectTransform));
             canvasGo.transform.SetParent(transform, false);
             canvasGo.layer = LayerMask.NameToLayer("UI");
@@ -148,8 +148,10 @@ namespace DivisorGame.UI
             var scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(UITheme.ReferenceWidth, UITheme.ReferenceHeight);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 0.5f;
+            // Expand는 가로/세로 중 더 빡빡한 쪽에 맞춰 축소하므로, 기준 해상도(1920x1080)
+            // 영역이 창 비율과 상관없이 항상 화면 안에 전부 들어온다. MatchWidthOrHeight(0.5)는
+            // 창이 기준보다 납작할 때 세로가 잘려서 상단바와 손패가 보이지 않는 문제가 있었다.
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
             canvasGo.AddComponent<GraphicRaycaster>();
 

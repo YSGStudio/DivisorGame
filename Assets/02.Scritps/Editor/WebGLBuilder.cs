@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -11,35 +10,62 @@ namespace DivisorGame.EditorTools
     /// WebGL 빌드 (T13).
     /// 메뉴에서 실행하거나, CLI에서 -executeMethod로 호출한다.
     ///
-    /// 압축은 꺼 둔다. gzip/Brotli로 압축하면 웹서버가 Content-Encoding 헤더를 정확히
-    /// 내려줘야 해서 로컬에서 간단히 열어 볼 때 실패하기 쉽다. 용량은 커지지만
-    /// 아무 정적 서버에서나 바로 동작하는 쪽을 택했다.
+    /// 용도가 두 가지라 진입점을 나눠 두었다.
+    ///  - 로컬 확인용: 압축 없음. 아무 정적 서버에서나 바로 열린다.
+    ///  - 배포용: Brotli 압축. 전송량이 1/4로 줄지만, 웹서버가 Content-Encoding 헤더를
+    ///    정확히 내려줘야 한다. divisorGame/vercel.json이 그 헤더를 지정한다.
     /// </summary>
     public static class WebGLBuilder
     {
-        private const string OutputDirectory = "Builds/WebGL";
+        private const string LocalOutputDirectory = "Builds/WebGL";
+        private const string DeployOutputDirectory = "divisorGame";
 
-        [MenuItem("약수 카드게임/WebGL 빌드", false, 20)]
+        /// <summary>브라우저 창 크기에 맞춰 캔버스를 채우는 커스텀 템플릿.</summary>
+        private const string ResponsiveTemplate = "PROJECT:Responsive";
+
+        [MenuItem("약수 카드게임/WebGL 빌드 (로컬 확인용)", false, 20)]
         public static void BuildFromMenu()
         {
-            BuildReport report = Build();
+            BuildReport report = Build(LocalOutputDirectory, WebGLCompressionFormat.Disabled);
             if (report == null) return;
 
             if (report.summary.result == BuildResult.Succeeded)
             {
-                EditorUtility.RevealInFinder(Path.GetFullPath(OutputDirectory));
+                EditorUtility.RevealInFinder(Path.GetFullPath(LocalOutputDirectory));
             }
         }
 
-        /// <summary>CLI용 진입점. 실패하면 0이 아닌 코드로 종료한다.</summary>
+        [MenuItem("약수 카드게임/WebGL 빌드 (배포용)", false, 21)]
+        public static void BuildDeployFromMenu()
+        {
+            BuildReport report = Build(DeployOutputDirectory, WebGLCompressionFormat.Brotli);
+            if (report == null) return;
+
+            if (report.summary.result == BuildResult.Succeeded)
+            {
+                EditorUtility.RevealInFinder(Path.GetFullPath(DeployOutputDirectory));
+            }
+        }
+
+        /// <summary>CLI용 진입점(로컬 확인용). 실패하면 0이 아닌 코드로 종료한다.</summary>
         public static void BuildFromCommandLine()
         {
-            BuildReport report = Build();
+            Exit(Build(LocalOutputDirectory, WebGLCompressionFormat.Disabled));
+        }
+
+        /// <summary>CLI용 진입점(배포용). 실패하면 0이 아닌 코드로 종료한다.</summary>
+        public static void BuildDeployFromCommandLine()
+        {
+            Exit(Build(DeployOutputDirectory, WebGLCompressionFormat.Brotli));
+        }
+
+        private static void Exit(BuildReport report)
+        {
             bool ok = report != null && report.summary.result == BuildResult.Succeeded;
             EditorApplication.Exit(ok ? 0 : 1);
         }
 
-        private static BuildReport Build()
+        private static BuildReport Build(string outputDirectory, WebGLCompressionFormat compression)
         {
             string[] scenes = GetEnabledScenes();
             if (scenes.Length == 0)
@@ -48,15 +74,19 @@ namespace DivisorGame.EditorTools
                 return null;
             }
 
-            Directory.CreateDirectory(OutputDirectory);
+            Directory.CreateDirectory(outputDirectory);
 
-            // 로컬에서 바로 열어 볼 수 있도록 압축을 끈다.
-            PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+            PlayerSettings.WebGL.compressionFormat = compression;
+            PlayerSettings.WebGL.template = ResponsiveTemplate;
+
+            // 압축을 쓰는 배포 빌드에서는 서버가 Content-Encoding을 내려주므로
+            // 로더에 압축 해제 코드를 넣지 않는다(로더 용량 절감).
+            PlayerSettings.WebGL.decompressionFallback = false;
 
             var options = new BuildPlayerOptions
             {
                 scenes = scenes,
-                locationPathName = OutputDirectory,
+                locationPathName = outputDirectory,
                 target = BuildTarget.WebGL,
                 targetGroup = BuildTargetGroup.WebGL,
                 options = BuildOptions.None
@@ -69,7 +99,7 @@ namespace DivisorGame.EditorTools
             {
                 Debug.Log(string.Format(
                     "WebGL 빌드 성공: {0}  ({1:N1} MB, {2:N0}초)",
-                    Path.GetFullPath(OutputDirectory),
+                    Path.GetFullPath(outputDirectory),
                     summary.totalSize / (1024f * 1024f),
                     summary.totalTime.TotalSeconds));
             }
