@@ -36,9 +36,9 @@ namespace DivisorGame.UI
     public class HandCardView : MonoBehaviour,
         IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler
     {
-        private Image _border;
-        private Image _fill;
-        private Text _numberText;
+        public const float CardHeight = 172f;
+
+        private CardFace _face;
 
         private int _index;
         private IHandCardHandler _handler;
@@ -52,25 +52,16 @@ namespace DivisorGame.UI
 
         public static HandCardView Create(Transform parent, Font font, IHandCardHandler handler)
         {
-            var border = UIFactory.CreatePanel("HandCard", parent, UITheme.HandBorder, SpriteFactory.RoundedLarge);
-            border.rectTransform.sizeDelta = new Vector2(126f, 172f);
+            var face = CardFace.Create("HandCard", parent, CardHeight, font, 72,
+                UITheme.HandBorder, UITheme.HandFill);
 
-            var layoutElement = border.gameObject.AddComponent<LayoutElement>();
-            layoutElement.preferredWidth = 126f;
-            layoutElement.preferredHeight = 172f;
+            Vector2 size = face.Root.sizeDelta;
+            var layoutElement = face.Root.gameObject.AddComponent<LayoutElement>();
+            layoutElement.preferredWidth = size.x;
+            layoutElement.preferredHeight = size.y;
 
-            var fill = UIFactory.CreatePanel("Fill", border.transform, UITheme.HandFill, SpriteFactory.RoundedLarge);
-            UIFactory.Stretch(fill.rectTransform, 6, 6, 6, 6);
-            fill.raycastTarget = false;
-
-            var numberText = UIFactory.CreateText("Number", fill.transform, "0", 72, UITheme.TextDark,
-                TextAnchor.MiddleCenter, font, FontStyle.Bold);
-            UIFactory.StretchAll(numberText.rectTransform);
-
-            var view = border.gameObject.AddComponent<HandCardView>();
-            view._border = border;
-            view._fill = fill;
-            view._numberText = numberText;
+            var view = face.Root.gameObject.AddComponent<HandCardView>();
+            view._face = face;
             view._handler = handler;
             return view;
         }
@@ -79,9 +70,7 @@ namespace DivisorGame.UI
         {
             _index = index;
             Value = value;
-            _numberText.text = value.ToString();
-            _border.color = UITheme.HandBorder;
-            _fill.color = UITheme.HandFill;
+            _face.SetNumber(value);
             SetDragging(false);
 
             // 손패가 바뀌면 이 자리에 다른 카드가 올 수 있으므로 더블클릭 연쇄를 끊는다.
@@ -92,13 +81,7 @@ namespace DivisorGame.UI
         /// <summary>끌고 있는 동안 원래 자리의 카드를 흐리게 보여 준다.</summary>
         public void SetDragging(bool dragging)
         {
-            var color = _border.color;
-            color.a = dragging ? 0.35f : 1f;
-            _border.color = color;
-
-            var fillColor = _fill.color;
-            fillColor.a = dragging ? 0.35f : 1f;
-            _fill.color = fillColor;
+            _face.SetAlpha(dragging ? 0.35f : 1f);
         }
 
         public void OnPointerClick(PointerEventData eventData)

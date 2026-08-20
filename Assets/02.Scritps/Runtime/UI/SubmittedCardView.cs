@@ -13,36 +13,30 @@ namespace DivisorGame.UI
     /// </summary>
     public class SubmittedCardView : MonoBehaviour
     {
-        public const float CardWidth = 116f;
         public const float CardHeight = 158f;
 
-        private Text _numberText;
+        /// <summary>이미 확보한 카드임을 알리는 옅은 초록빛. 손패 카드와 한눈에 구분된다.</summary>
+        private static readonly Color CollectedTint = new Color(0.80f, 0.98f, 0.82f, 1f);
+
+        private CardFace _face;
 
         /// <summary>현재 표시 중인 약수 값.</summary>
         public int Value { get; private set; }
 
         public static SubmittedCardView Create(Transform parent, Font font)
         {
-            var border = UIFactory.CreatePanel("SubmittedCard", parent, UITheme.TargetClearedBorder,
-                SpriteFactory.RoundedLarge);
-            border.rectTransform.sizeDelta = new Vector2(CardWidth, CardHeight);
-            border.raycastTarget = false;
+            var face = CardFace.Create("SubmittedCard", parent, CardHeight, font, 64,
+                UITheme.TargetClearedBorder, UITheme.TargetClearedFill);
+            face.SetRaycastTarget(false);
+            face.SetTint(CollectedTint);
 
-            var layoutElement = border.gameObject.AddComponent<LayoutElement>();
-            layoutElement.preferredWidth = CardWidth;
-            layoutElement.preferredHeight = CardHeight;
+            Vector2 size = face.Root.sizeDelta;
+            var layoutElement = face.Root.gameObject.AddComponent<LayoutElement>();
+            layoutElement.preferredWidth = size.x;
+            layoutElement.preferredHeight = size.y;
 
-            var fill = UIFactory.CreatePanel("Fill", border.transform, UITheme.TargetClearedFill,
-                SpriteFactory.RoundedLarge);
-            UIFactory.Stretch(fill.rectTransform, 6, 6, 6, 6);
-            fill.raycastTarget = false;
-
-            var numberText = UIFactory.CreateText("Number", fill.transform, "0", 64, UITheme.TextDark,
-                TextAnchor.MiddleCenter, font, FontStyle.Bold);
-            UIFactory.StretchAll(numberText.rectTransform);
-
-            var view = border.gameObject.AddComponent<SubmittedCardView>();
-            view._numberText = numberText;
+            var view = face.Root.gameObject.AddComponent<SubmittedCardView>();
+            view._face = face;
             view.gameObject.SetActive(false);
             return view;
         }
@@ -50,7 +44,7 @@ namespace DivisorGame.UI
         public void Bind(int value)
         {
             Value = value;
-            _numberText.text = value.ToString();
+            _face.SetNumber(value);
         }
     }
 }

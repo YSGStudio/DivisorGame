@@ -42,8 +42,8 @@ namespace DivisorGame.UI
         private readonly List<HandCardView> _handViews = new List<HandCardView>();
 
         private RectTransform _canvasRect;
+        private CardFace _dragGhostFace;
         private RectTransform _dragGhost;
-        private Text _dragGhostText;
 
         private GameObject _menuRoot;
         private GameObject _choicePanel;
@@ -357,26 +357,18 @@ namespace DivisorGame.UI
         /// <summary>
         /// 드래그하는 동안 포인터를 따라다니는 카드 그림.
         /// 실제 카드는 레이아웃 안에 있어 움직이면 줄이 흐트러지므로, 원본은 흐리게 두고
-        /// 이 사본만 움직인다. 드롭 대상 판정을 가리지 않도록 레이캐스트는 모두 꺼 둔다.
+        /// 이 사본만 움직인다. 드롭 대상 판정을 가리지 않도록 레이캐스트는 꺼 둔다.
         /// </summary>
         private void BuildDragGhost(RectTransform root)
         {
-            var border = UIFactory.CreatePanel("DragGhost", root, UITheme.DragGhostBorder,
-                SpriteFactory.RoundedLarge);
-            border.raycastTarget = false;
-            _dragGhost = border.rectTransform;
+            _dragGhostFace = CardFace.Create("DragGhost", root, HandCardView.CardHeight, uiFont, 72,
+                UITheme.DragGhostBorder, UITheme.DragGhostFill);
+            _dragGhostFace.SetRaycastTarget(false);
+
+            _dragGhost = _dragGhostFace.Root;
             _dragGhost.anchorMin = new Vector2(0.5f, 0.5f);
             _dragGhost.anchorMax = new Vector2(0.5f, 0.5f);
             _dragGhost.pivot = new Vector2(0.5f, 0.5f);
-            _dragGhost.sizeDelta = new Vector2(126f, 172f);
-
-            var fill = UIFactory.CreatePanel("Fill", _dragGhost, UITheme.DragGhostFill, SpriteFactory.RoundedLarge);
-            UIFactory.Stretch(fill.rectTransform, 6, 6, 6, 6);
-            fill.raycastTarget = false;
-
-            _dragGhostText = UIFactory.CreateText("Number", fill.transform, "0", 72, UITheme.TextDark,
-                TextAnchor.MiddleCenter, uiFont, FontStyle.Bold);
-            UIFactory.StretchAll(_dragGhostText.rectTransform);
 
             _dragGhost.gameObject.SetActive(false);
         }
@@ -468,7 +460,7 @@ namespace DivisorGame.UI
         {
             if (_menuRoot.activeSelf || _resultRoot.activeSelf) return;
 
-            _dragGhostText.text = _game.Hand.GetCard(index).ToString();
+            _dragGhostFace.SetNumber(_game.Hand.GetCard(index));
             _dragGhost.gameObject.SetActive(true);
             MoveDragGhost(eventData);
         }
